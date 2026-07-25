@@ -105,24 +105,11 @@ jobs:
           tag_name: ai-ops-${{ github.run_number }}
           name: "AI Ops Release #${{ github.run_number }}"
           body_path: ai_ops_report.md
+          files: |
+            ./model.h5
+            ./release/ai-ops-release.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload model asset
-        uses: actions/upload-release-asset@v4
-
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./model.h5
-          asset_name: model.h5
-          asset_content_type: application/octet-stream
-
-      - name: Upload release package asset
-        uses: actions/upload-release-asset@v4
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/ai-ops-release.zip
-          asset_name: ai-ops-release.zip
-          asset_content_type: application/zip
 
   monitor:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
