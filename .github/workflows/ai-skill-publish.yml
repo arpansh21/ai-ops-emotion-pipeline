@@ -1,0 +1,143 @@
+name: AI Ops Pipeline
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-ops-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests
+
+  analyze:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - run: python ai_ops_agent.py --root . --output ai_ops_report.md --output-json ai_ops_report.json
+      - name: Upload AI Ops report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ops-report
+          path: ai_ops_report.md
+
+  validate:
+    if: github.ref == 'refs/heads/main'
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          model_path = Path('model.h5')
+          report_path = Path('ai_ops_report.md')
+          if not model_path.exists():
+              print('Model artifact missing; validation cannot proceed.')
+              sys.exit(1)
+          if not report_path.exists():
+              print('AI Ops report missing; validation cannot proceed.')
+              sys.exit(1)
+          print(f'Model artifact found: {model_path.stat().st_size // 1024} KB')
+          print(f'Report found: {report_path}')
+          PY
+      - run: |
+          mkdir -p release
+          zip -r release/ai-ops-release.zip model.h5 ai_ops_report.md ai_ops_report.json
+      - name: Upload validation package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ops-release-package
+          path: release/ai-ops-release.zip
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - run: python ai_ops_agent.py --root . --output ai_ops_report.md --output-json ai_ops_report.json --fail-on-issue
+      - name: Create GitHub release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ai-ops-${{ github.run_number }}
+          name: "AI Ops Release #${{ github.run_number }}"
+          body_path: ai_ops_report.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload model asset
+        uses: actions/upload-release-asset@v2
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./model.h5
+          asset_name: model.h5
+          asset_content_type: application/octet-stream
+
+      - name: Upload release package asset
+        uses: actions/upload-release-asset@v2
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release/ai-ops-release.zip
+          asset_name: ai-ops-release.zip
+          asset_content_type: application/zip
+
+  monitor:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - run: python ai_ops_agent.py --root . --output ai_ops_monitor.md --output-json ai_ops_monitor.json
+      - name: Upload AI Ops monitor report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ops-monitor-report
+          path: ai_ops_monitor.md
+
+  summary:
+    needs: monitor
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Summary of latest AI Ops monitoring run
+        run: |
+          echo 'AI Ops monitor workflow completed. Reports are available as artifacts.'
