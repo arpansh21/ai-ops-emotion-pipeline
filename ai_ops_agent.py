@@ -9,8 +9,7 @@ from typing import List
 
 ISSUE_KEYWORDS = [
     'error', 'exception', 'failed', 'timeout', 'unavailable', 'crash',
-    'deprecated', 'unsupported', 'invalid', 'mismatch'
-    # Removed: 'warning', 'todo', 'fixme', 'stale', 'drift', 'bias'
+    'deprecated', 'unsupported', 'invalid', 'mismatch', 'warning', 'todo'
 ]
 
 AI_KEYWORDS = [
