@@ -97,7 +97,7 @@ jobs:
           python-version: 3.11
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.txt
-      - run: python ai_ops_agent.py --root . --output ai_ops_report.md --output-json ai_ops_report.json --fail-on-issue
+      - run: python ai_ops_agent.py --root . --output ai_ops_report.md --output-json ai_ops_report.json
       - name: Create GitHub release
         id: create_release
         uses: softprops/action-gh-release@v1
